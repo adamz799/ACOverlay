@@ -12,25 +12,39 @@ from PyQt6.QtWidgets import QWidget
 
 
 class InputTraceWidget(QWidget):
-    """油门刹车历史曲线图"""
+    """油门刹车转向历史曲线图"""
     
     def __init__(self, parent=None, max_samples=200):
         super().__init__(parent)
         self.max_samples = max_samples
         self.throttle_history: deque = deque(maxlen=max_samples)
         self.brake_history: deque = deque(maxlen=max_samples)
+        self.steering_history: deque = deque(maxlen=max_samples)
         self.setMinimumSize(350, 100)
         
         # 颜色配置
         self.throttle_color = QColor(0, 255, 0)      # 绿色-油门
         self.brake_color = QColor(255, 50, 50)       # 红色-刹车
+        self.steering_color = QColor(150, 150, 150)  # 灰色-转向
         self.bg_color = QColor(20, 20, 20, 200)      # 半透明背景
         self.grid_color = QColor(60, 60, 60)         # 网格颜色
         
-    def add_data(self, throttle: float, brake: float):
-        """添加新数据点"""
+        # 转向最大角度（度），用于归一化
+        self.max_steering_angle = 450.0
+        
+    def add_data(self, throttle: float, brake: float, steering: float = 0.0):
+        """添加新数据点
+        
+        Args:
+            throttle: 油门 0-1
+            brake: 刹车 0-1
+            steering: 转向角度（度），负值左转，正值右转
+        """
         self.throttle_history.append(throttle)
         self.brake_history.append(brake)
+        # 将转向角度归一化到 -1 到 1 范围
+        normalized_steering = max(-1.0, min(1.0, steering / self.max_steering_angle))
+        self.steering_history.append(normalized_steering)
         self.update()
         
     def paintEvent(self, event):
@@ -48,11 +62,45 @@ class InputTraceWidget(QWidget):
             y = int(rect.height() * i / 4)
             painter.drawLine(0, y, rect.width(), y)
         
-        # 绘制曲线
+        # 先绘制转向曲线（在底层）
+        if len(self.steering_history) > 1:
+            self._draw_steering_curve(painter, list(self.steering_history))
+        
+        # 再绘制油门刹车曲线（在上层）
         if len(self.throttle_history) > 1:
             self._draw_curve(painter, list(self.throttle_history), self.throttle_color)
         if len(self.brake_history) > 1:
             self._draw_curve(painter, list(self.brake_history), self.brake_color)
+    
+    def _draw_steering_curve(self, painter: QPainter, data: List[float]):
+        """绘制转向曲线 - 中间为0，向上为左转，向下为右转"""
+        if len(data) < 2:
+            return
+            
+        path = QPainterPath()
+        rect = self.rect()
+        center_y = rect.height() / 2  # 中线位置
+        
+        x_step = rect.width() / self.max_samples
+        start_x = rect.width() - len(data) * x_step
+        
+        # 起始点：steering为负（左转）时向上，为正（右转）时向下
+        # data已归一化到 -1 到 1，乘以半高度得到偏移
+        y = center_y - data[0] * (rect.height() / 2)
+        path.moveTo(start_x, y)
+        
+        for i, value in enumerate(data[1:], 1):
+            x = start_x + i * x_step
+            y = center_y - value * (rect.height() / 2)
+            path.lineTo(x, y)
+        
+        # 绘制曲线（无填充，仅线条）
+        painter.setPen(QPen(self.steering_color, 2))
+        painter.drawPath(path)
+        
+        # 绘制中线参考（转向为0的位置）
+        painter.setPen(QPen(QColor(80, 80, 80), 1, Qt.PenStyle.DashLine))
+        painter.drawLine(0, int(center_y), rect.width(), int(center_y))
             
     def _draw_curve(self, painter: QPainter, data: List[float], color: QColor):
         """绘制曲线"""

@@ -5,6 +5,7 @@ AC Overlay 主窗口
 
 import sys
 import os
+import math
 from datetime import datetime
 from PyQt6.QtCore import Qt, QTimer, QPoint
 from PyQt6.QtGui import QAction, QIcon, QGuiApplication
@@ -228,7 +229,9 @@ class OverlayWindow(QMainWindow):
             self.status_label.setStyleSheet("color: #ff3333; font-size: 16px;")
         
         # 更新各组件
-        self.input_trace.add_data(data.throttle, data.brake)
+        # 转向角度从弧度转为度数
+        steering_deg = math.degrees(data.steer_angle) if hasattr(data, 'steer_angle') else 0.0
+        self.input_trace.add_data(data.throttle, data.brake, steering_deg)
         self.pedal_bars.set_values(data.throttle, data.brake)
         self.gear_speed.set_values(data.gear, data.speed_kmh)
         self.rpm_lights.set_values(data.rpm)
