@@ -173,16 +173,36 @@ class TelemetryLogger:
     # 25Hz (40ms) 提供更细致的数据，同时保持合理的文件大小
     SAMPLE_INTERVAL_MS = 40
     
-    # RaceChrono 兼容的 CSV 表头映射
+    # RaceChrono 精简格式 - 使用 RaceChrono 官方支持的列名
+    # 参考: https://racechrono.com/article/data-channels
     RACECHRONO_HEADERS = [
+        ("timestamp", "Time"),                    # 时间（秒）
+        ("lap_number", "Lap number"),             # 圈数
+        ("speed_kmh", "Speed"),                   # 速度 (km/h)
+        ("throttle", "Throttle position"),        # 油门 (0-1)
+        ("brake", "Brake position"),              # 刹车 (0-1)
+        ("steering", "Steering angle"),           # 方向盘角度
+        ("gear", "Gear"),                         # 挡位
+        ("rpm", "Engine RPM"),                    # 转速
+        ("g_lateral", "Lateral acceleration"),    # 横向G (g)
+        ("g_longitudinal", "Longitudinal acceleration"),  # 纵向G (g)
+        ("world_pos_x", "X position"),            # X坐标 (m)
+        ("world_pos_z", "Y position"),            # Y坐标 (m) - 注意AC的Z轴对应地面Y
+        ("heading", "Bearing"),                   # 航向角 (deg)
+        ("distance_traveled", "Distance"),        # 行驶距离 (m)
+        ("lap_time_ms", "Lap time"),              # 圈时间 (ms)
+    ]
+    
+    # 完整数据表头（用于详细日志）
+    FULL_HEADERS = [
         ("timestamp", "Time (s)"),
         ("lap_number", "Lap #"),
         ("lap_time_ms", "Lap Time (ms)"),
         ("speed_kmh", "Speed (km/h)"),
         ("speed_ms", "Speed (m/s)"),
-        ("throttle", "Throttle (%)"),
-        ("brake", "Brake (%)"),
-        ("clutch", "Clutch (%)"),
+        ("throttle", "Throttle"),
+        ("brake", "Brake"),
+        ("clutch", "Clutch"),
         ("steering", "Steering Angle (deg)"),
         ("gear", "Gear"),
         ("rpm", "Engine RPM"),
@@ -219,10 +239,10 @@ class TelemetryLogger:
         ("tyre_temp_fr", "Tyre Temp FR (C)"),
         ("tyre_temp_rl", "Tyre Temp RL (C)"),
         ("tyre_temp_rr", "Tyre Temp RR (C)"),
-        ("tyre_wear_fl", "Tyre Wear FL (%)"),
-        ("tyre_wear_fr", "Tyre Wear FR (%)"),
-        ("tyre_wear_rl", "Tyre Wear RL (%)"),
-        ("tyre_wear_rr", "Tyre Wear RR (%)"),
+        ("tyre_wear_fl", "Tyre Wear FL"),
+        ("tyre_wear_fr", "Tyre Wear FR"),
+        ("tyre_wear_rl", "Tyre Wear RL"),
+        ("tyre_wear_rr", "Tyre Wear RR"),
         ("brake_temp_fl", "Brake Temp FL (C)"),
         ("brake_temp_fr", "Brake Temp FR (C)"),
         ("brake_temp_rl", "Brake Temp RL (C)"),
@@ -236,12 +256,12 @@ class TelemetryLogger:
         ("fuel", "Fuel (L)"),
         ("fuel_per_lap", "Fuel Per Lap (L)"),
         ("turbo_boost", "Turbo Boost (bar)"),
-        ("ers_charge", "ERS Charge (%)"),
+        ("ers_charge", "ERS Charge"),
         ("ers_power_level", "ERS Power Level"),
         ("kers_charge", "KERS Charge (kJ)"),
         ("tc_level", "TC Level"),
         ("abs_level", "ABS Level"),
-        ("brake_bias", "Brake Bias (%)"),
+        ("brake_bias", "Brake Bias"),
         ("engine_brake", "Engine Brake"),
         ("drs_available", "DRS Available"),
         ("drs_enabled", "DRS Enabled"),
@@ -308,19 +328,21 @@ class TelemetryLogger:
         # 打开CSV文件
         self._csv_file = open(filepath, 'w', newline='', encoding='utf-8')
         
-        # 写入元数据注释（RaceChrono 兼容）
-        self._csv_file.write(f"# AC Overlay Telemetry Log\n")
-        self._csv_file.write(f"# Session Start: {session_info.start_time}\n")
-        self._csv_file.write(f"# Car: {session_info.car_model}\n")
-        self._csv_file.write(f"# Track: {session_info.track}\n")
-        if session_info.track_config:
-            self._csv_file.write(f"# Track Config: {session_info.track_config}\n")
-        self._csv_file.write(f"# Player: {session_info.player_name}\n")
-        self._csv_file.write(f"# Track Length: {session_info.track_length:.2f} m\n")
-        self._csv_file.write(f"# Max RPM: {session_info.max_rpm}\n")
-        self._csv_file.write(f"#\n")
+        # RaceChrono 不支持注释行，直接写入CSV表头
+        # 元数据保存到单独的 .info 文件中
+        info_filepath = self.output_dir / (self._current_filename.replace('.csv', '.info'))
+        with open(info_filepath, 'w', encoding='utf-8') as info_file:
+            info_file.write(f"AC Overlay Telemetry Log\n")
+            info_file.write(f"Session Start: {session_info.start_time}\n")
+            info_file.write(f"Car: {session_info.car_model}\n")
+            info_file.write(f"Track: {session_info.track}\n")
+            if session_info.track_config:
+                info_file.write(f"Track Config: {session_info.track_config}\n")
+            info_file.write(f"Player: {session_info.player_name}\n")
+            info_file.write(f"Track Length: {session_info.track_length:.2f} m\n")
+            info_file.write(f"Max RPM: {session_info.max_rpm}\n")
         
-        # 写入CSV表头
+        # 写入CSV表头（无注释行）
         headers = [h[1] for h in self.RACECHRONO_HEADERS]
         self._csv_writer = csv.writer(self._csv_file)
         self._csv_writer.writerow(headers)
